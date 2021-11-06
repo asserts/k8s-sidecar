@@ -74,8 +74,8 @@ def main():
         print(f"{timestamp()} 5xx response content will not be enabled.")
         enable_5xx = False
 
-    #with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-    #    namespace = os.getenv("NAMESPACE", f.read())
+    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+        namespace = os.getenv("NAMESPACE", f.read())
     namespace = 'default'
 
     method = os.getenv(METHOD)
