@@ -19,7 +19,7 @@ REQ_RETRY_READ = 5 if os.getenv("REQ_RETRY_READ") is None else int(os.getenv("RE
 REQ_RETRY_BACKOFF_FACTOR = 1.1 if os.getenv("REQ_RETRY_BACKOFF_FACTOR") is None else float(os.getenv("REQ_RETRY_BACKOFF_FACTOR"))
 REQ_TIMEOUT = 10 if os.getenv("REQ_TIMEOUT") is None else float(os.getenv("REQ_TIMEOUT"))
 
-def write_data_to_file(folder, filename, data, data_type=CONTENT_TYPE_TEXT):
+def write_data_to_file(folder, filename, data, data_type=CONTENT_TYPE_TEXT, key_changed=False):
     """
     Write text to a file. If the parent folder doesn't exist, create it. If there are insufficient
     permissions to create the directory, log an error and return.
@@ -60,16 +60,20 @@ def write_data_to_file(folder, filename, data, data_type=CONTENT_TYPE_TEXT):
     with open(absolute_path, write_type) as f:
         f.write(data)
         f.close()
+        if key_changed:
+            print(f"{timestamp()} ADDED key {filename}")
     if os.getenv('DEFAULT_FILE_MODE'):
         mode = int(os.getenv('DEFAULT_FILE_MODE'), base=8)
         os.chmod(absolute_path, mode)
     return True
 
 
-def remove_file(folder, filename):
+def remove_file(folder, filename, key_changed=False):
     complete_file = os.path.join(folder, filename)
     if os.path.isfile(complete_file):
         os.remove(complete_file)
+        if key_changed:
+            print(f"{timestamp()} DELETED key {filename}")
         return True
     else:
         print(f"{timestamp()} Error: {complete_file} file not found")
@@ -144,3 +148,11 @@ def execute(script_path):
         print(f"{timestamp()} Script exit code: {result.returncode}")
     except subprocess.CalledProcessError as e:
         print(f"{timestamp()} Script failed with error: {e}")
+
+
+def get_filenames(folder):
+    if not os.path.exists(folder):
+        print(f"Directory {folder} does not exist!")
+        return
+
+    return os.listdir(folder)
