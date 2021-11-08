@@ -80,7 +80,6 @@ def list_resources(label, label_value, target_folder, request_url, request_metho
     ret = getattr(v1, _list_namespace[namespace][resource])(**additional_args)
 
     files_changed = False
-    event_type = None
 
     # For all the found resources
     for item in ret.items:
@@ -92,9 +91,9 @@ def list_resources(label, label_value, target_folder, request_url, request_metho
         dest_folder = _get_destination_folder(metadata, target_folder, folder_annotation)
 
         if resource == RESOURCE_CONFIGMAP:
-            files_changed |= _process_config_map(dest_folder, item, resource, unique_filenames, event_type, enable_5xx)
+            files_changed |= _process_config_map(dest_folder, item, resource, unique_filenames, enable_5xx)
         else:
-            files_changed = _process_secret(dest_folder, item, resource, unique_filenames, event_type, enable_5xx)
+            files_changed = _process_secret(dest_folder, item, resource, unique_filenames, enable_5xx)
 
     if script and files_changed:
         execute(script)
@@ -103,7 +102,7 @@ def list_resources(label, label_value, target_folder, request_url, request_metho
         request(request_url, request_method, enable_5xx, request_payload)
 
 
-def _process_secret(dest_folder, secret, resource, unique_filenames, enable_5xx, event_type, is_removed=False):
+def _process_secret(dest_folder, secret, resource, unique_filenames, enable_5xx, is_removed=False):
     if secret.data is None:
         print(f"{timestamp()} No data field in {resource}")
         return False
@@ -116,11 +115,10 @@ def _process_secret(dest_folder, secret, resource, unique_filenames, enable_5xx,
             unique_filenames,
             CONTENT_TYPE_BASE64_BINARY,
             enable_5xx,
-            event_type,
             is_removed)
 
 
-def _process_config_map(dest_folder, config_map, resource, unique_filenames, enable_5xx, event_type, is_removed=False):
+def _process_config_map(dest_folder, config_map, resource, unique_filenames, enable_5xx, is_removed=False):
     files_changed = False
     if config_map.data is None and config_map.binary_data is None:
         print(f"{timestamp()} No data/binaryData field in {resource}")
@@ -133,7 +131,6 @@ def _process_config_map(dest_folder, config_map, resource, unique_filenames, ena
             unique_filenames,
             CONTENT_TYPE_TEXT,
             enable_5xx,
-            event_type,
             is_removed)
     if config_map.binary_data is not None:
         files_changed |= _iterate_data(
@@ -144,42 +141,38 @@ def _process_config_map(dest_folder, config_map, resource, unique_filenames, ena
             unique_filenames,
             CONTENT_TYPE_BASE64_BINARY,
             enable_5xx,
-            event_type,
             is_removed)
     return files_changed
 
 
 def _iterate_data(data, dest_folder, metadata, resource, unique_filenames, content_type, enable_5xx,
-                  event_type, remove_files=False):
+                  remove_files=False):
     files_changed = False
     key_changed = False
-    to_add = []
+    folder_files = set(get_filenames(dest_folder))
+    data_keys = set(data.keys())
+    to_remove = list(folder_files.difference(data_keys))
+    to_add = data_keys.difference(folder_files)
 
-    if not remove_files and event_type != 'ADDED':
-        folder_files = set(get_filenames(dest_folder))
-        data_keys = set(data.keys())
-        to_remove = list(folder_files.difference(data_keys))
-        to_add = data_keys.difference(folder_files)
-        remove_files = True
+    if not remove_files:
         key_changed = len(to_remove) > 0
-
         if key_changed:
+            remove_files = True
             print(f"{timestamp()} Working on {resource}: {metadata.namespace}/{metadata.name}")
 
-        for file in to_remove:
-            print(file)
-            data_content = ''
-            files_changed |= _update_file(
-                file,
-                data_content,
-                dest_folder,
-                metadata,
-                resource,
-                unique_filenames,
-                content_type,
-                enable_5xx,
-                remove_files,
-                key_changed)
+            for file in to_remove:
+                data_content = ''
+                files_changed |= _update_file(
+                    file,
+                    data_content,
+                    dest_folder,
+                    metadata,
+                    resource,
+                    unique_filenames,
+                    content_type,
+                    enable_5xx,
+                    remove_files,
+                    key_changed)
 
         remove_files = False
 
@@ -253,10 +246,9 @@ def _watch_resource_iterator(label, label_value, target_folder, request_url, req
         item_removed = event_type == "DELETED"
         if resource == RESOURCE_CONFIGMAP:
             files_changed |= _process_config_map(dest_folder, item, resource, unique_filenames, enable_5xx,
-                                                 event_type, item_removed)
+                                                 item_removed)
         else:
-            files_changed |= _process_secret(dest_folder, item, resource, unique_filenames, enable_5xx,
-                                             event_type, item_removed)
+            files_changed |= _process_secret(dest_folder, item, resource, unique_filenames, enable_5xx, item_removed)
 
         if script and files_changed:
             execute(script)
