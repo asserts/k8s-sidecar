@@ -153,33 +153,30 @@ def _iterate_data(data, dest_folder, metadata, resource, unique_filenames, conte
                   event_type, remove_files=False):
     files_changed = False
     key_changed = False
-    to_add = []
+    folder_files = set(get_filenames(dest_folder))
+    data_keys = set(data.keys())
+    to_remove = list(folder_files.difference(data_keys))
+    to_add = data_keys.difference(folder_files)
 
-    if not remove_files and event_type != 'ADDED':
-        folder_files = set(get_filenames(dest_folder))
-        data_keys = set(data.keys())
-        to_remove = list(folder_files.difference(data_keys))
-        to_add = data_keys.difference(folder_files)
-        remove_files = True
+    if not remove_files:
         key_changed = len(to_remove) > 0
-
         if key_changed:
+            remove_files = True
             print(f"{timestamp()} Working on {resource}: {metadata.namespace}/{metadata.name}")
 
-        for file in to_remove:
-            print(file)
-            data_content = ''
-            files_changed |= _update_file(
-                file,
-                data_content,
-                dest_folder,
-                metadata,
-                resource,
-                unique_filenames,
-                content_type,
-                enable_5xx,
-                remove_files,
-                key_changed)
+            for file in to_remove:
+                data_content = ''
+                files_changed |= _update_file(
+                    file,
+                    data_content,
+                    dest_folder,
+                    metadata,
+                    resource,
+                    unique_filenames,
+                    content_type,
+                    enable_5xx,
+                    remove_files,
+                    key_changed)
 
         remove_files = False
 
