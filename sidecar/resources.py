@@ -15,7 +15,7 @@ from urllib3.exceptions import MaxRetryError
 from urllib3.exceptions import ProtocolError
 
 from helpers import request, write_data_to_file, remove_file, timestamp, unique_filename, CONTENT_TYPE_TEXT, \
-    CONTENT_TYPE_BASE64_BINARY, execute
+    CONTENT_TYPE_BASE64_BINARY, execute, get_filenames
 
 RESOURCE_SECRET = "secret"
 RESOURCE_CONFIGMAP = "configmap"
@@ -148,7 +148,37 @@ def _process_config_map(dest_folder, config_map, resource, unique_filenames, ena
 def _iterate_data(data, dest_folder, metadata, resource, unique_filenames, content_type, enable_5xx,
                   remove_files=False):
     files_changed = False
+    key_changed = False
+    folder_files = set(get_filenames(dest_folder))
+    data_keys = set(data.keys())
+    to_remove = list(folder_files.difference(data_keys))
+    to_add = data_keys.difference(folder_files)
+
+    if not remove_files:
+        key_changed = len(to_remove) > 0
+        if key_changed:
+            remove_files = True
+            print(f"{timestamp()} Working on {resource}: {metadata.namespace}/{metadata.name}")
+
+            for file in to_remove:
+                data_content = ''
+                files_changed |= _update_file(
+                    file,
+                    data_content,
+                    dest_folder,
+                    metadata,
+                    resource,
+                    unique_filenames,
+                    content_type,
+                    enable_5xx,
+                    remove_files,
+                    key_changed)
+
+        remove_files = False
+
     for data_key in data.keys():
+        if data_key in to_add:
+            key_changed = True
         data_content = data[data_key]
         files_changed |= _update_file(
             data_key,
@@ -159,12 +189,14 @@ def _iterate_data(data, dest_folder, metadata, resource, unique_filenames, conte
             unique_filenames,
             content_type,
             enable_5xx,
-            remove_files)
+            remove_files,
+            key_changed)
+        key_changed = False
     return files_changed
 
 
 def _update_file(data_key, data_content, dest_folder, metadata, resource,
-                 unique_filenames, content_type, enable_5xx, remove=False):
+                 unique_filenames, content_type, enable_5xx, remove=False, key_changed=False):
     try:
         filename, file_data = _get_file_data_and_name(data_key,
                                                       data_content,
@@ -176,9 +208,9 @@ def _update_file(data_key, data_content, dest_folder, metadata, resource,
                                        resource=resource,
                                        resource_name=metadata.name)
         if not remove:
-            return write_data_to_file(dest_folder, filename, file_data, content_type)
+            return write_data_to_file(dest_folder, filename, file_data, content_type, key_changed)
         else:
-            return remove_file(dest_folder, filename)
+            return remove_file(dest_folder, filename, key_changed)
     except Exception as e:
         print(f"{timestamp()} Error when updating from ${data_key} into ${dest_folder}: ${e}")
         return False
